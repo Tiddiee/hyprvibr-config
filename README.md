@@ -83,25 +83,25 @@ The rules file is not collected by default, because it is your personal list of 
 | `hyprvibr-add -r` | Remove existing rules |
 | `hyprvibr-add -h` | Show help |
 
-**Adding:** lists open windows by class and title (one entry per class; classes that already
+**Adding:** lists open windows by `initialClass` and title (one entry per initialClass; ones that already
 have a rule are marked `[already in rules]`). Select several at once (fzf: Tab to toggle, Enter to
 confirm; otherwise type numbers like `1 3 5`). For each one you enter a saturation (default
 `2.2`) and a comment (default is the window title). Lines are appended to the rules file, and you
 are asked whether to reload Hyprland.
 
-**Removing:** lists every active rule as `class | saturation | comment`, with `[open]` on apps that
+**Removing:** lists every active rule as `initialClass | saturation | comment`, with `[open]` on apps that
 are currently running. Select, confirm, and the lines are deleted permanently (no backup is made).
 Comment lines and blank lines are never touched.
 
 ## Rules file format
 
 ```text
-# Format: window_class | saturation # comment about the app
+# Format: initialClass | saturation # comment about the app
 
 steam_app_4000 | 2.2 # Garry's Mod
 ```
 
-- First field: window class. Second field: saturation.
+- First field: the window's `initialClass`. Second field: saturation.
 - Text after `#` on a rule line is a comment.
 - Lines starting with `#` and blank lines are ignored.
 
@@ -112,7 +112,7 @@ hyprctl -j clients | jq '.[] | {title, class, initialClass}'
 hyprctl -j activewindow | jq '{title, class, initialClass}'
 ```
 
-The script writes `class`, not `initialClass`.
+The script writes `initialClass` (the class a window had when it first opened), which stays fixed even if the live `class` changes later. If the live `class` differs, the picker shows it as `(class: ...)` for reference.
 
 ## How the Lua addon works
 

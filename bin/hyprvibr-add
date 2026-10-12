@@ -5,7 +5,10 @@
 #   hyprvibr-add        pick open Hyprland windows and add them to the rules file
 #   hyprvibr-add -r     pick existing rules and remove them from the rules file
 #
-# Rule format:   class | saturation # comment
+# Rule format:   initialClass | saturation # comment
+#
+# Rules are written using the window's initialClass (the class it had when it
+# first opened), which stays fixed even if the live "class" changes later.
 #
 # Requires: hyprctl, jq   (optional: fzf for multi-select picker)
 
@@ -56,13 +59,13 @@ ask_reload() {
 remove_mode() {
     [[ -f "$RULES_FILE" ]] || die "Rules file not found: $RULES_FILE"
 
-    # Classes of currently open windows (optional, only used for marking)
+    # initialClass of currently open windows (optional, only used for marking)
     declare -A OPEN=()
     if command -v hyprctl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 \
        && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
         while IFS= read -r c; do
             [[ -n "$c" ]] && OPEN["$c"]=1
-        done < <(hyprctl -j clients 2>/dev/null | jq -r '.[].class')
+        done < <(hyprctl -j clients 2>/dev/null | jq -r '.[].initialClass')
     fi
 
     # Parse active rules: lineno <TAB> class <TAB> saturation <TAB> comment
@@ -115,7 +118,7 @@ remove_mode() {
         DEL_LINES=("${PICKED[@]}")
     else
         echo
-        echo "Existing rules (class | saturation | comment):"
+        echo "Existing rules (initialClass | saturation | comment):"
         echo "------------------------------------------------------------"
         for i in "${!LABELS[@]}"; do
             printf '%3d) %s\n' "$((i+1))" "${LABELS[$i]}"
@@ -179,22 +182,26 @@ done
 
 # ---------- collect windows ----------
 # Uses the same data as: hyprctl -j clients | jq '.[] | {title, class, initialClass}'
-# Deduplicated by class, empty classes dropped.
+# Deduplicated by initialClass, empty initialClass dropped.
+# CLASSES holds the initialClass (the value written to the rules file);
+# LIVE holds the window's current class, shown only when it differs.
 mapfile -t ROWS < <(
     hyprctl -j clients 2>/dev/null \
     | jq -r '[.[] | {title, class, initialClass}]
-             | map(select(.class != "" and .class != null))
-             | unique_by(.class)
+             | map(select(.initialClass != "" and .initialClass != null))
+             | unique_by(.initialClass)
              | .[]
-             | [.class, .initialClass, .title] | @tsv'
+             | [.initialClass,
+                (if (.class // "") == "" then .initialClass else .class end),
+                (.title // "")] | @tsv'
 )
 
 [[ ${#ROWS[@]} -gt 0 ]] || die "No open windows found."
 
-CLASSES=(); INITS=(); TITLES=()
+CLASSES=(); LIVE=(); TITLES=()
 for row in "${ROWS[@]}"; do
-    IFS=$'\t' read -r cls init title <<<"$row"
-    CLASSES+=("$cls"); INITS+=("$init"); TITLES+=("$title")
+    IFS=$'\t' read -r init cur title <<<"$row"
+    CLASSES+=("$init"); LIVE+=("$cur"); TITLES+=("$title")
 done
 
 # ---------- selection ----------
@@ -206,8 +213,10 @@ if command -v fzf >/dev/null 2>&1; then
         for i in "${!CLASSES[@]}"; do
             note=""
             class_exists "${CLASSES[$i]}" && note="  [already in rules]"
-            # class <TAB> display text
-            printf '%s\t%-35s │ %s%s\n' "${CLASSES[$i]}" "${CLASSES[$i]}" "${TITLES[$i]}" "$note"
+            extra=""
+            [[ "${LIVE[$i]}" != "${CLASSES[$i]}" ]] && extra="  (class: ${LIVE[$i]})"
+            # initialClass <TAB> display text
+            printf '%s\t%-35s │ %s%s%s\n' "${CLASSES[$i]}" "${CLASSES[$i]}" "${TITLES[$i]}" "$extra" "$note"
         done \
         | fzf --multi --delimiter=$'\t' --with-nth=2 \
               --header='Tab = select/deselect | Enter = confirm | Esc = cancel' \
@@ -217,13 +226,13 @@ if command -v fzf >/dev/null 2>&1; then
     SELECTED=("${PICKED[@]}")
 else
     echo
-    echo "Open windows (class | title):"
+    echo "Open windows (initialClass | title):"
     echo "------------------------------------------------------------"
     for i in "${!CLASSES[@]}"; do
         note=""
         class_exists "${CLASSES[$i]}" && note="  [already in rules]"
         extra=""
-        [[ "${INITS[$i]}" != "${CLASSES[$i]}" ]] && extra="  (initialClass: ${INITS[$i]})"
+        [[ "${LIVE[$i]}" != "${CLASSES[$i]}" ]] && extra="  (class: ${LIVE[$i]})"
         printf '%3d) %-30s | %s%s%s\n' "$((i+1))" "${CLASSES[$i]}" "${TITLES[$i]}" "$extra" "$note"
     done
     echo "------------------------------------------------------------"
