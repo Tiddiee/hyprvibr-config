@@ -59,11 +59,7 @@ install_file() {
 
     echo "--- $label"
     if [[ ! -f "$src" ]]; then
-        echo "  SKIPPED: $1 is not in the repo."
-        if [[ "$1" == "addons/hyprvibr.lua" ]]; then
-            echo "  Run ./collect.sh on the machine that has your working hyprvibr.lua,"
-            echo "  or paste it into addons/hyprvibr.lua, then run this installer again."
-        fi
+        echo "  SKIPPED: $1 is not in the repo. Is your clone complete?"
         echo
         return
     fi
